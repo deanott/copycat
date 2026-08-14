@@ -162,7 +162,7 @@ jobs:
             libxdo-dev
       # Must match `rust-version` in the root Cargo.toml; nothing enforces that, so
       # bump both together. See the note there for how to re-derive the floor.
-      - uses: dtolnay/rust-toolchain@1.95
+      - uses: dtolnay/rust-toolchain@1.100
       - uses: Swatinem/rust-cache@v2
       - name: Build on the MSRV toolchain
         run: cargo build --workspace --locked
