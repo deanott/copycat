@@ -190,6 +190,12 @@ jobs:
   # newly-disclosed vuln in a transitive crate surfaces automatically.
   audit:
     runs-on: ubuntu-latest
+    # audit-check reports through a check run, which the default read-only token
+    # cannot create: without this the job fails on "Resource not accessible by
+    # integration" even when the scan itself finds nothing.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@v7
       - uses: rustsec/audit-check@v2

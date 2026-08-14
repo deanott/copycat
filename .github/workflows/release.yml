@@ -40,6 +40,12 @@ jobs:
             xvfb xauth
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # mcp_smoke spawns the real copycatd binary out of the target dir, so the
+      # whole workspace has to be built before the tests run, exactly as the CI
+      # build-test job does it.
+      - name: Build
+        run: cargo build --workspace --locked
+
       - name: Test
         run: xvfb-run -a cargo test --workspace --locked
 
