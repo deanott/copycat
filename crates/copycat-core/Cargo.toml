@@ -1,0 +1,32 @@
+[package]
+name = "copycat-core"
+description = "Core types & logic for copycat: temporal clipboard store, hot cache, content-type detection, PII classification, autofill profiles."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Compiles in the cleartext reveal path, gated again by COPYCAT_INSECURE at
+# runtime. NEVER enable for a release build: without it `reveal_secrets()` is a
+# compile-time `false` and every reveal branch dies. See `src/insecure.rs`.
+debug-unsafe = []
+
+# Hand-rolled latency harness for the store hot path, no criterion.
+[[bench]]
+name = "store_hot_path"
+harness = false
+
+[dependencies]
+serde.workspace = true
+zeroize = "1"   # scrub Secret/PII payloads from RAM on drop
+serde_json.workspace = true
+anyhow.workspace = true
+base64.workspace = true            # edit-on-paste base64 transform
+percent-encoding.workspace = true  # edit-on-paste URL encode/decode transform
+
+# `ipc::check_trust` compares the socket's owner against our own euid. Unix-only:
+# on Windows the pipe's DACL is set at creation and there is nothing to check.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

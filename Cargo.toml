@@ -1,0 +1,61 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/copycat-core",
+    "crates/copycatd",
+    "crates/copycat-mcp",
+    "crates/copycat-cli",
+    "crates/copycat-ui",
+]
+
+[workspace.package]
+# One version for the whole workspace: these ship as one product from one tag,
+# and 1.0.0 is about the interfaces, not feature coverage.
+version = "1.0.0"
+edition = "2021"
+# Set by egui/eframe, not our code. Keep the `msrv` CI job in lockstep, nothing
+# enforces it, and re-derive after a dependency bump rather than guessing:
+#   cargo metadata --locked --format-version 1 \
+#     | jq -r '.packages[] | select(.rust_version) | "\(.rust_version) \(.name)"' \
+#     | sort -V | tail
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+# No `authors`: it bakes a personal email into every artifact and buys nothing.
+repository = "https://github.com/deanott/copycat"
+
+[workspace.dependencies]
+copycat-core = { path = "crates/copycat-core" }
+# Explicit features, not "full", which also pulls fs, process and parking_lot.
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",       # UnixListener/UnixStream + Windows named pipes
+    "io-util",
+    "io-std",    # stdin/stdout for the MCP stdio transport
+    "time",
+    "sync",
+    "signal",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+base64 = "0.23"           # edit-on-paste base64 transform
+percent-encoding = "2.3"  # edit-on-paste URL transform
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+# Only for `geteuid`: the socket trust check needs a uid std does not expose.
+libc = "0.2"
+
+# Full debuginfo cost ~300 MB per copycat-ui build hash and cargo never GCs them;
+# dropping it for deps saved 445 MB. Set `debug = 2` to inspect variables.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

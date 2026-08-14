@@ -1,0 +1,23 @@
+[package]
+name = "copycat-cli"
+description = "The `copycat` CLI: copy/paste/recall/pin from the terminal and over SSH; talks to copycatd over local IPC."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Binary name differs from the package name, so the target is spelled out.
+[[bin]]
+name = "copycat"
+path = "src/main.rs"
+
+[features]
+debug-unsafe = ["copycat-core/debug-unsafe"]
+
+[dependencies]
+copycat-core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+base64.workspace = true          # OSC 52 payload encoding (src/osc52.rs)

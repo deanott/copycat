@@ -1,0 +1,9 @@
+# Docker reads this from the build context root, so it stays beside the Dockerfile.
+target
+.git
+**/*.swp
+.DS_Store
+secrets
+*.copycat-db
+*.copycat-key
+.worktrees

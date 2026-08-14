@@ -1,0 +1,37 @@
+# Spell checker configuration (https://github.com/crate-ci/typos).
+#
+#   typos                 # report
+#   typos --write-changes # fix
+#
+# Everything below is a genuine exception, not a blanket mute.
+
+[files]
+extend-exclude = [
+  "target/",
+  "Cargo.lock",
+  # Generated task pages: seeded-random tokens full of accidental letter pairs.
+  # `sk-ITZM5jtgUe52...` trips on "Ue", `AKIABldGDcMgSzmqw5UE156K` on "UE".
+  "evals/tasks/*.html",
+]
+
+[default.extend-words]
+# macOS 11 is called Big Sur. Not a typo for "Sure".
+Sur = "Sur"
+# Both spellings are current English and the codebase consistently uses this one.
+unparseable = "unparseable"
+Unparseable = "Unparseable"
+# Letter pairs inside base64 and seeded-token fixtures that also live in .rs
+# files, so the file-level excludes above cannot reach them:
+#   pii.rs   "Zm9vYmFyMTIzNDU2Nzg5MEFCQ0RFRkdI9x2Q"  -> "Iz"
+#   usage.rs "...ITZM5jtgUe52RvEJgw..."               -> "Ue"
+Iz = "Iz"
+Ue = "Ue"
+# `out_tok += ot` — an abbreviation for output-tokens in the eval harness.
+ot = "ot"
+
+[default.extend-identifiers]
+# These are DELIBERATE misspellings. `evals/behavioral/scenarios.jsonl` asks the
+# model to "fix the grammar" on a badly-typed sentence, and docs/TESTING.md quotes
+# the same fixture. Correcting them would destroy what the test is testing.
+teh = "teh"
+redy = "redy"

@@ -1,0 +1,36 @@
+# Dependabot opens the update PRs. Without this file the repo gets security
+# ALERTS only, which is how a fixed advisory (wayland-scanner 0.31.11, shipping
+# quick-xml 0.41) sat unnoticed for weeks: nothing was watching for the release
+# that closed it.
+#
+# Grouped so the native GUI tree does not produce a dozen PRs a week. Cargo.lock
+# is committed and CI builds --locked, so every one of these is a lockfile diff
+# that the full pipeline gates.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # egui/eframe move as a family and currently cannot land at all: 0.36
+      # requires Rust 1.95, above the 1.92 the msrv job enforces. Grouping keeps
+      # that one blocked PR from becoming six.
+      gui:
+        patterns: ["egui*", "eframe", "epaint", "emath", "ecolor", "tray-icon", "muda", "gtk*", "glib*"]
+      wayland-x11:
+        patterns: ["wayland*", "smithay*", "x11*", "winit", "glutin*", "arboard"]
+      patch-sweep:
+        update-types: ["patch"]
+
+  # The workflows pin actions by major tag, so this catches the ones that move
+  # underneath us (checkout, cargo-deny-action, action-gh-release).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"

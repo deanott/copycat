@@ -1,0 +1,66 @@
+# gitleaks configuration.
+#
+#   gitleaks git --log-opts="--all --full-history"   # scan all history
+#   gitleaks dir .                                   # scan the working tree
+#
+# A clipboard daemon is exactly the project where a real credential could end up
+# committed by accident, so this is worth running before every release and worth
+# keeping honest. The allowlist below is deliberately narrow: it exempts *known
+# synthetic fixtures*, never a path or a rule wholesale.
+#
+# Full-history scan on 2026-08-03 (146 commits): 20 findings, all 20 verified
+# synthetic. Every one is covered below.
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Keep the default rules, but stop the generic high-entropy detector firing on
+# this repo's deliberately credential-SHAPED test data.
+id = "generic-api-key"
+[rules.allowlist]
+description = "Fake credential shapes used by the classifier tests and eval fixtures"
+regexes = [
+  # Sequential placeholders: ghp_0123456789abcdef, sk_live_0123…, glpat-0123…
+  '''0123456789abcdef''',
+  # `pii.rs` asserts the classifier catches these. They must LOOK like
+  # credentials — that is the whole point of the test.
+  '''ghp_[0-9a-f]{16,}''',
+  '''sk-proj-0123''',
+]
+
+[allowlist]
+description = "Synthetic eval fixtures and classifier test vectors"
+
+paths = [
+  # Build output. `gitleaks dir .` walks it otherwise — 484 MB of compiled
+  # artifacts, which is slow and finds only vendored dependency test data.
+  '''^target/''',
+  '''^\.git/''',
+  # Generated task pages. `serve.py --dump tasks` writes these from a SEEDED
+  # random.Random, so every value in them is reproducible from seed 0 and none
+  # ever came from a real service. Verified: the `sk-` API keys and the 200-char
+  # long token in these files regenerate exactly from `random.Random(0)`.
+  '''evals/tasks/.*\.html''',
+]
+
+regexes = [
+  # The sequential placeholder every classifier test is built from. This lives in
+  # the GLOBAL allowlist rather than under one rule because the same body appears
+  # behind several prefixes — ghp_, ghs_, glpat-, sk_live_, xapp-1- — and each of
+  # those trips a DIFFERENT gitleaks rule (github-pat, gitlab-pat,
+  # stripe-access-token, slack-app-token). A rule-scoped entry only ever fixes one
+  # of them, which is how the first version of this file still reported four.
+  '''0123456789abcdef''',
+  # `_api_key()` in serve.py: literally "sk-" + 32 chars from a seeded RNG.
+  '''sk-[A-Za-z0-9]{32}''',
+  # `_long_token()` in serve.py: 200 chars of mixed case + digits.
+  '''[A-Za-z0-9]{200}''',
+  # AWS's own published example key, used in the classifier tests.
+  '''AKIAIOSFODNN7EXAMPLE''',
+]
+
+# NOTE for whoever adds a finding to this file: an entry here is a claim that a
+# value is synthetic. Prove it before you add it — regenerate it from the seed,
+# or point at the line of test code that constructs it. Do not silence a finding
+# because it looks fine.

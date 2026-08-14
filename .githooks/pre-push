@@ -1,0 +1,76 @@
+#!/bin/sh
+# The slower gate: lints, and the cross-platform type-check nobody runs by hand.
+#
+# Two checks, both chosen because CI has actually failed on them:
+#
+#   1. clippy -D warnings. This is CI's second step, and it sits *after* the fmt
+#      check in the same job — so for as long as fmt was failing, clippy never
+#      executed at all. It had been failing on dead code in `state.rs` the whole
+#      time, invisibly.
+#
+#   2. `cargo check --tests --target x86_64-pc-windows-msvc`. Plain `cargo check
+#      --target ...` does NOT compile test targets, so three copycat-mcp tests
+#      using `UnixListener` with no `#[cfg(unix)]` gate broke the Windows job
+#      while every local check passed. `--tests` is the flag that catches it. A
+#      stray `use std::io::Write` needed only by a `#[cfg(unix)]` function is the
+#      same class of bug.
+#
+#      KNOW ITS LIMIT: this is a type-check, so it only finds code that will not
+#      COMPILE on Windows. A test that compiles everywhere but asserts a
+#      Unix-specific answer sails straight through and still fails the real job —
+#      `socket_path_falls_back_to_runtime_dir` asserting on XDG_RUNTIME_DIR did
+#      exactly that. Only the `windows` CI job, which actually runs the suite,
+#      catches that class. Do not read a clean pre-push as "Windows is fine".
+#
+# Tests are deliberately NOT run here: the GUI crate needs a display (CI uses
+# xvfb) and the suite is slow enough that you would start skipping the hook.
+#
+# Install (once per clone — hooks are not copied by `git clone`):
+#   git config --local core.hooksPath .githooks
+# Bypass for one push:
+#   git push --no-verify        (or SKIP_HOOKS=1 git push ...)
+set -eu
+
+[ "${SKIP_HOOKS:-}" = "1" ] && exit 0
+
+if ! command -v cargo >/dev/null 2>&1; then
+	echo "pre-push: cargo not on PATH — skipping." >&2
+	exit 0
+fi
+
+# copycat-ui's default `gui` feature needs pkg-config + the gtk/glib dev headers.
+# On a box without them the build dies inside glib-sys's build script, which is an
+# environment problem the developer cannot fix by editing code. Narrow the scope
+# instead of failing on something unactionable; CI has the libs and covers the GUI
+# crate. `copycat-ui --no-default-features` still lints the pure `rows` logic.
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists gtk+-3.0 2>/dev/null; then
+	scope='the whole workspace'
+	set -- --workspace --all-targets
+else
+	scope='non-GUI crates (no gtk dev headers here; CI covers copycat-ui)'
+	set -- --all-targets -p copycat-core -p copycatd -p copycat-cli -p copycat-mcp
+fi
+
+echo "pre-push: clippy -D warnings over $scope"
+if ! cargo clippy --locked "$@" -- -D warnings; then
+	echo "" >&2
+	echo "pre-push: clippy failed. Fix the warnings, or push with --no-verify." >&2
+	exit 1
+fi
+
+# Only meaningful once the target is installed:
+#   rustup target add x86_64-pc-windows-msvc
+# `check` type-checks without linking, so no MSVC linker is needed on Linux.
+if rustup target list --installed 2>/dev/null | grep -q '^x86_64-pc-windows-msvc$'; then
+	echo "pre-push: type-checking Windows test targets"
+	if ! cargo check --locked --tests --target x86_64-pc-windows-msvc \
+		-p copycat-core -p copycatd -p copycat-cli -p copycat-mcp; then
+		echo "" >&2
+		echo "pre-push: the Windows test targets do not compile." >&2
+		echo "Usually a test or import that is Unix-only without a #[cfg(unix)] gate." >&2
+		exit 1
+	fi
+else
+	echo "pre-push: skipping the Windows check"
+	echo "          enable it with: rustup target add x86_64-pc-windows-msvc"
+fi

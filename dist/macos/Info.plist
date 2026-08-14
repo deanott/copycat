@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Info.plist template for Copycat.app. Substituted and assembled by
+  dist/macos/build-app.sh — __VERSION__ and __LSUIELEMENT__ are placeholders,
+  so this file is not a loadable plist on its own.
+
+  CFBundleIconFile is the ONLY thing that gives the app a Dock icon. A bare
+  Mach-O binary (which is how copycat-ui ships today) gets macOS's generic
+  executable icon instead, and eframe's ViewportBuilder::with_icon cannot fix
+  that: window icons are a no-op on macOS.
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleName</key>
+    <string>Copycat</string>
+    <key>CFBundleDisplayName</key>
+    <string>Copycat</string>
+    <key>CFBundleIdentifier</key>
+    <string>io.github.deanott.copycat</string>
+
+    <!-- Must match the file installed into Contents/MacOS. -->
+    <key>CFBundleExecutable</key>
+    <string>copycat-ui</string>
+
+    <!-- Resolves to Contents/Resources/copycat.icns; the extension is implied. -->
+    <key>CFBundleIconFile</key>
+    <string>copycat</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+
+    <!-- egui renders at native scale; without this macOS runs the app through
+         the 1x upscaler and every glyph is soft on a Retina display. -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- arm64 requires Big Sur; nothing here needs anything newer. -->
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+__LSUIELEMENT__
+</dict>
+</plist>

@@ -1,0 +1,61 @@
+# Rust build output. Cargo.lock is committed on purpose: binary workspace.
+/target
+**/*.rs.bk
+
+# Profiling / coverage. Not a blanket *.svg: copycat.svg is a tracked asset.
+*.profraw
+*.profdata
+perf.data*
+flamegraph.svg
+
+*.orig
+*.rej
+
+# copycat local state: never commit clipboard data or keys.
+*.copycat-db
+*.copycat-key
+*.sock
+/secrets
+
+.env
+.env.*
+.secrets
+*.log
+
+# Python eval harness. uv.lock stays tracked if the harness grows one.
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ruff_cache/
+
+# Editors
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code: deny per-user state, re-include shared project config. Needs
+# `.claude/*`, since git cannot re-include under an excluded directory.
+#
+# Skills are NOT re-included. They wrap the same build and test commands
+# CLAUDE.md documents, for one harness, and a second copy of those commands is
+# a second thing to keep true. CLAUDE.md is the tracked one.
+.claude/*
+!.claude/settings.json
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Scratch and eval output
+/tmp
+/evals/computer-use/harness/tmp
+/evals/output/
+
+# Local-only writing guide. Not shipped: it is working notes on voice, and it
+# necessarily contains the em dashes its own rule 1 forbids, in the rule that
+# forbids them, so it can never satisfy scripts/check-docs.sh.
+docs/VOICE.md

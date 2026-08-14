@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "copycat": {
+      "command": "${COPYCAT_MCP_BIN:-copycat-mcp}",
+      "args": ["--stdio"],
+      "env": {
+        "COPYCAT_MCP_LOG": "copycat_mcp=info"
+      }
+    }
+  }
+}

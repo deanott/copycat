@@ -1,0 +1,34 @@
+[package]
+name = "copycatd"
+description = "copycat daemon: owns the OS clipboard (X11/Wayland), watches for changes, drives the temporal store, exposes a local IPC socket, and bridges SSH/phone sync."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+debug-unsafe = ["copycat-core/debug-unsafe"]
+
+[dependencies]
+copycat-core.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# No change watcher, so clip.rs polls it. `image-data` is off because it drags in
+# image + png + colour management; turn it on with the first image entry kind.
+arboard = { version = "3", default-features = false, features = [
+    "wayland-data-control",
+] }
+
+[dev-dependencies]
+# Virtual clock, so server.rs's `wait` tests don't sit through their own timeout.
+tokio = { workspace = true, features = ["test-util"] }
+
+# umask() and core-dump suppression. Windows does both with inline Win32 calls.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true

@@ -1,0 +1,32 @@
+# cargo-audit configuration (read by `cargo audit` and by rustsec/audit-check@v2
+# in .github/workflows/ci.yml).
+#
+# POLICY: we do not ignore advisories to make CI green. An advisory is ignored
+# ONLY when it is provably unreachable in this build, with the reasoning written
+# down here so the next person can re-check it. Anything reachable gets fixed.
+#
+# The list is empty, and the intent is to keep it that way. cargo-deny's
+# maintenance-status findings live in deny.toml; this file is vulnerabilities.
+
+[advisories]
+ignore = []
+
+# DELIBERATELY NOT IGNORED
+#
+# RUSTSEC-2026-0189 — rmcp: DNS rebinding in the Streamable HTTP server transport.
+#   This one was REAL: copycat-mcp depends on rmcp directly and enables
+#   `transport-streamable-http-server`. It is fixed properly, by upgrading
+#   rmcp 0.9 -> 2.x (patched >= 1.4.0), not by silencing it. If it ever comes
+#   back, CI should fail — leave it armed.
+#
+# RUSTSEC-2026-0194 / RUSTSEC-2026-0195 — quick-xml DoS on untrusted XML, reached
+#   only through wayland-scanner's build-time code generator. These were ignored
+#   here for a while on unreachability grounds. They are now FIXED instead:
+#   wayland-scanner 0.31.11 takes quick-xml 0.41, so the lockfile no longer
+#   carries a vulnerable quick-xml. Do not re-add them.
+#
+# GHSA-wrw7-89jp-8q8g / RUSTSEC-2024-0429 — glib < 0.20 `VariantStrIter`
+#   unsoundness, flagged by Dependabot. glib 0.18 arrives only under the
+#   archived gtk3 stack behind copycat-ui's `gui` feature, and 0.20 requires
+#   gtk4. Tracked with the gtk3 advisories in deny.toml; it closes when the tray
+#   moves off gtk3, not before.

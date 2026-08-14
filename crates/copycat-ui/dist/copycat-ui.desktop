@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=copycat
+GenericName=Clipboard History
+Comment=Browse, filter and re-copy your temporal clipboard history
+Exec=copycat-ui
+Icon=copycat
+Terminal=false
+Categories=Utility;GTK;
+Keywords=clipboard;copy;paste;history;copycat;snippet;
+StartupNotify=true
+StartupWMClass=copycat-ui

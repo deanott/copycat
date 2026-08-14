@@ -1,0 +1,53 @@
+[package]
+name = "copycat-ui"
+description = "copycat's tray / menu-bar companion: a system-tray icon plus an egui window to browse, filter and re-copy clipboard history. Talks to copycatd over local IPC."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["gui"]
+# Off leaves a logic-only crate with no egui/tray/gtk, so tests run headless.
+gui = ["dep:egui", "dep:eframe", "dep:tray-icon", "dep:gtk", "dep:windows-sys"]
+debug-unsafe = ["copycat-core/debug-unsafe"]
+
+[dependencies]
+copycat-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# GUI-only, and out of [workspace.dependencies]: nothing else uses them and they
+# set the workspace MSRV floor.
+egui = { version = "0.36", optional = true }
+eframe = { version = "0.36", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+    "persistence",   # eframe::Storage: window geometry + egui memory (the
+                     # detail-panel split) survive a restart
+], optional = true }
+tray-icon = { version = "0.24", optional = true }
+
+# tray.rs pumps a glib main loop for the StatusNotifier tray. Pin the gtk major
+# tray-icon links, so the build holds one gtk.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18", optional = true }
+
+# AttachConsole + SetStdHandle, so --help prints from a windows-subsystem binary.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+], optional = true }
+
+# Embeds the icon resource. NOT under `cfg(windows)`: that cfg reads the target
+# triple, so a Linux build withheld the crate build.rs still referenced. build.rs
+# gates on CARGO_CFG_TARGET_OS instead.
+[build-dependencies]
+winresource = "0.1"

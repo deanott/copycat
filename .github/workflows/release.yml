@@ -1,0 +1,172 @@
+name: Release
+
+# Push a tag like `v1.0.0` to build release binaries for Linux/macOS/Windows and
+# attach them to a GitHub Release. Kept simple: build the three bins, package,
+# upload.
+#
+# Windows ships the daemon, CLI and MCP server only — not the tray GUI. That is
+# now a packaging decision rather than a capability gap: copycat-ui builds and its
+# tray icon works on Windows (verified on Windows 10 on 2026-08-04, and the CI
+# `windows` job lints it), but nobody has decided how a GUI binary should be
+# packaged or updated there, so it stays a source build. The IPC is a named pipe
+# rather than a Unix socket; see `copycatd::ipc`. Note the CI workflow's `windows`
+# job is what actually EXECUTES that code — this workflow only compiles it.
+on:
+  push:
+    tags: ["v*"]
+
+# Default for every job. `build` widens it for itself; nothing else needs to.
+permissions:
+  contents: read
+
+jobs:
+  # Gate the whole release on the test suite passing on Linux (the authoritative
+  # native job), so a tag from a non-green commit can't ship broken binaries.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux clipboard + GUI deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libgtk-3-dev libayatana-appindicator3-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libwayland-dev \
+            libxdo-dev \
+            xvfb xauth
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: xvfb-run -a cargo test --workspace --locked
+
+  # Same supply-chain gate CI runs on every push, repeated here so a tag cannot
+  # ship binaries built from a dependency tree with an open advisory. Policy and
+  # the reasons for every ignored advisory live in deny.toml and .cargo/audit.toml.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans sources advisories
+
+  build:
+    needs: [test, audit]
+    # Only this job publishes. contents: write uploads the release assets;
+    # id-token + attestations let attest-build-provenance sign with a
+    # short-lived Sigstore cert from the job's OIDC identity and record the
+    # statement on the repo. test and audit keep the read-only default.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest              # Apple Silicon
+            target: aarch64-apple-darwin
+          - os: macos-latest              # Intel (cross-compiled on the arm runner)
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux clipboard deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build binaries
+        run: cargo build --release --locked --target ${{ matrix.target }}
+             -p copycatd -p copycat-cli -p copycat-mcp
+
+      # Windows only, and a separate step so a GUI break cannot be mistaken for a
+      # daemon break. Linux and macOS are excluded for different reasons: Linux
+      # needs the GTK/GL stack this job does not install, and macOS wants an .app
+      # bundle (dist/macos/build-app.sh) rather than a bare binary in a tarball.
+      # Windows needs neither — the crate links no extra system libraries there.
+      - name: Build the tray GUI (Windows)
+        if: runner.os == 'Windows'
+        # COPYCAT_REQUIRE_ICON turns build.rs's "no resource compiler, carry on
+        # with a warning" into a hard error. A dev without a Windows SDK should
+        # still be able to build and cross-check the crate; a RELEASE binary
+        # silently losing its icon is a defect nobody would notice until it was
+        # published. windows-latest has rc.exe, so this only fires on a real break.
+        env:
+          COPYCAT_REQUIRE_ICON: '1'
+        run: cargo build --release --locked --target ${{ matrix.target }} -p copycat-ui
+
+      - name: Package
+        shell: bash
+        run: |
+          bindir="target/${{ matrix.target }}/release"
+          stage="copycat-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir "$stage"
+          cp README.md LICENSE-MIT LICENSE-APACHE "$stage/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "$bindir/copycatd.exe" "$bindir/copycat.exe" "$bindir/copycat-mcp.exe" "$stage/"
+            # The tray GUI ships on Windows only. Copied separately (and checked)
+            # so a missing GUI build fails the release here, rather than shipping
+            # a zip that install.ps1 then reports as incomplete.
+            cp "$bindir/copycat-ui.exe" "$stage/"
+            # The installers it needs to be findable/always-on, so a downloaded
+            # archive is self-contained rather than requiring a repo checkout.
+            mkdir -p "$stage/dist"
+            cp dist/windows/install-autostart.ps1 "$stage/dist/"
+            cp crates/copycat-ui/dist/install-desktop.ps1 crates/copycat-ui/dist/copycat.ico "$stage/dist/"
+            7z a "$stage.zip" "$stage" >/dev/null
+            asset="$stage.zip"
+          else
+            cp "$bindir/copycatd" "$bindir/copycat" "$bindir/copycat-mcp" "$stage/"
+            tar czf "$stage.tar.gz" "$stage"
+            asset="$stage.tar.gz"
+          fi
+          # Checksum so downloaders can verify the archive. sha256sum on
+          # Linux/Windows-Git-Bash, shasum on macOS.
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
+
+      # The .sha256 proves the archive is intact, not where it came from:
+      # whoever can swap the asset can swap the checksum beside it. This signs a
+      # provenance statement tying the archive to this workflow run and commit,
+      # verifiable with:
+      #   gh attestation verify <archive> --repo deanott/copycat
+      # It matters because the documented install path is `curl | sh`.
+      #
+      # PUBLIC REPOS ONLY on Free/Pro/Team plans; private repos need GitHub
+      # Enterprise Cloud. This repo is private today, so the step skips itself
+      # rather than failing the release. It starts working the moment the repo
+      # goes public, with no edit here. Until then the .sha256 is all a
+      # downloader gets, and dist/install.sh verifies exactly that.
+      - name: Attest build provenance
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ env.ASSET }}
+
+      - name: Attach to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256

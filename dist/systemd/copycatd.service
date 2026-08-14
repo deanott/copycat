@@ -1,0 +1,41 @@
+[Unit]
+Description=copycatd — intelligent temporal clipboard daemon
+Documentation=https://github.com/deanott/copycat
+# Soft ordering only. graphical-session.target is not active on every desktop
+# (it depends on the DE wiring it up), so we must NOT Require/BindTo it or the
+# service would never start on those setups. We order after it when it does
+# exist, and otherwise rely on the restart loop below to wait out the display.
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/copycatd
+
+# copycatd degrades to a headless (socket-only) store when it cannot reach a
+# display. That is a real mode — but as a boot service it is a trap: copycatd can
+# win the race against the X/Wayland server, come up "successfully", and then sit
+# there NOT owning the clipboard forever. REQUIRE_OS turns that silent downgrade
+# into a hard failure so the restart loop below can back off and try again until
+# the display is genuinely up.
+Environment=COPYCAT_REQUIRE_OS=1
+
+# DISPLAY/XAUTHORITY normally arrive via the session's `systemctl --user
+# import-environment`. Uncomment and pin them if your DE does not do that and the
+# service keeps restarting with "no OS clipboard could be attached".
+#Environment=DISPLAY=:0
+#Environment=XAUTHORITY=%h/.Xauthority
+
+# Log level. `copycatd=debug` adds per-request latency lines (op=, elapsed_us=).
+Environment=COPYCATD_LOG=copycatd=info
+
+Restart=always
+RestartSec=2s
+# Don't give up while waiting for a slow display server to appear at boot.
+StartLimitIntervalSec=0
+
+# The socket lives in $XDG_RUNTIME_DIR and is cleaned up on exit.
+KillSignal=SIGINT
+TimeoutStopSec=5s
+
+[Install]
+WantedBy=default.target

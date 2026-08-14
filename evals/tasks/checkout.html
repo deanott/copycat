@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>checkout (seed 0)</title>
+<style>
+ body{font-family:system-ui,sans-serif;margin:2rem;max-width:640px}
+ h1{font-size:1.1rem} .panel{border:1px solid #ccc;border-radius:8px;padding:1rem;margin:1rem 0}
+ .row{display:flex;gap:.75rem;align-items:center;margin:.35rem 0}
+ .lbl{width:6rem;color:#555;font-size:.85rem}
+ .src{font-family:monospace;background:#f4f4f4;padding:.15rem .4rem;border-radius:4px}
+ input{flex:1;padding:.3rem .4rem;font-family:monospace}
+ button{padding:.4rem .9rem;margin-top:.5rem}
+ #status{margin-top:.6rem;font-family:monospace}
+</style></head>
+<body>
+<h1>Task: checkout — move source values into the form and submit</h1>
+<div class="panel"><strong>Source</strong><div class="row"><span class="lbl">name</span><span class="src" id="src-name">Ken Thompson</span></div><div class="row"><span class="lbl">email</span><span class="src" id="src-email">ken.thompson@example.com</span></div><div class="row"><span class="lbl">phone</span><span class="src" id="src-phone">+1-630-241-5242</span></div><div class="row"><span class="lbl">address</span><span class="src" id="src-address">8386 Cedar St, Ashland</span></div><div class="row"><span class="lbl">card</span><span class="src" id="src-card">4940 5969 8808 6866</span></div></div>
+<div class="panel"><strong>Target form</strong><div class="row"><label class="lbl" for="tgt-name">name</label><input type="password" id="tgt-name" autocomplete="off"></div><div class="row"><label class="lbl" for="tgt-email">email</label><input type="password" id="tgt-email" autocomplete="off"></div><div class="row"><label class="lbl" for="tgt-phone">phone</label><input type="password" id="tgt-phone" autocomplete="off"></div><div class="row"><label class="lbl" for="tgt-address">address</label><input type="password" id="tgt-address" autocomplete="off"></div><div class="row"><label class="lbl" for="tgt-card">card</label><input type="password" id="tgt-card" autocomplete="off"></div>
+  <button id="submit" type="button">Submit</button>
+  <div id="status">unsubmitted</div>
+</div>
+<script>
+ window.__TASK = {"name": "checkout", "shape": "handoff", "fields": [{"key": "name", "value": "Ken Thompson", "secret": false, "source_sel": "#src-name", "target_sel": "#tgt-name"}, {"key": "email", "value": "ken.thompson@example.com", "secret": false, "source_sel": "#src-email", "target_sel": "#tgt-email"}, {"key": "phone", "value": "+1-630-241-5242", "secret": false, "source_sel": "#src-phone", "target_sel": "#tgt-phone"}, {"key": "address", "value": "8386 Cedar St, Ashland", "secret": false, "source_sel": "#src-address", "target_sel": "#tgt-address"}, {"key": "card", "value": "4940 5969 8808 6866", "secret": true, "source_sel": "#src-card", "target_sel": "#tgt-card"}], "targets": [{"key": "address", "sel": "#tgt-address"}, {"key": "name", "sel": "#tgt-name"}, {"key": "phone", "sel": "#tgt-phone"}, {"key": "email", "sel": "#tgt-email"}, {"key": "card", "sel": "#tgt-card"}], "submit_sel": "#submit", "secret": true, "check": "exact", "expected": {"name": "Ken Thompson", "email": "ken.thompson@example.com", "phone": "+1-630-241-5242", "address": "8386 Cedar St, Ashland", "card": "4940 5969 8808 6866"}, "prompt": "Task 'checkout': your ACCOUNT page shows 5 details (name, email, phone, address, card). The CHECKOUT form needs all 5 \u2014 but the account page is GONE once you call proceed_to_checkout, and you cannot go back. Capture everything you will need BEFORE you proceed. Then fill every field on the checkout form and call submit. Start by calling read_source."};
+ window.__SUBMITTED = null;
+ window.__DONE = false;
+ document.getElementById('submit').addEventListener('click', function() {
+   var out = {};
+   window.__TASK.fields.forEach(function(f) {
+     out[f.key] = document.getElementById('tgt-' + f.key).value;
+   });
+   window.__SUBMITTED = out;
+   window.__DONE = true;
+   document.getElementById('status').textContent = 'submitted';
+ });
+</script>
+</body></html>

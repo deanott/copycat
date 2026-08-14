@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd user agent for copycatd — the macOS counterpart to
+  dist/systemd/copycatd.service.
+
+  This file is a TEMPLATE. launchd does NOT expand `~`, `$HOME` or systemd's
+  `%h` inside ProgramArguments or paths, so the placeholders below must be
+  substituted with absolute paths before the plist is loaded. That is what
+  dist/launchd/install-agent.sh does; do not copy this file into
+  ~/Library/LaunchAgents by hand.
+
+    __COPYCATD_BIN__   absolute path to the copycatd binary
+    __LOG_DIR__        absolute path to a writable log directory
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.github.deanott.copycatd</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__COPYCATD_BIN__</string>
+    </array>
+
+    <!-- Start at login and keep it up. Mirrors Restart=always in the systemd
+         unit: copycatd is meant to be always-on, so an operator-initiated quit
+         is also restarted. Unload the agent to stop it for real. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Aqua only. copycatd reaches the pasteboard through NSPasteboard, which
+         requires a GUI login session; loading this agent into an ssh or
+         background session would give a daemon that can never attach one. -->
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Turn the silent headless downgrade into a hard failure so KeepAlive
+             retries instead of leaving a daemon that owns no clipboard. The
+             Linux race this guards against (winning against the X server) is
+             rarer on macOS, but a login agent can still start before the
+             session is fully up. -->
+        <key>COPYCAT_REQUIRE_OS</key>
+        <string>1</string>
+        <!-- `copycatd=debug` adds per-request latency lines (op=, elapsed_us=). -->
+        <key>COPYCATD_LOG</key>
+        <string>copycatd=info</string>
+    </dict>
+
+    <!-- launchd's default respawn floor is 10s; 5 keeps a restart loop that is
+         waiting out a slow login from feeling stuck, without hot-spinning. -->
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+
+    <!-- The daemon polls the pasteboard every 400 ms. Background would put it in
+         a throttled I/O band and add latency to every copy. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <!-- copycatd never logs clipboard CONTENT (ids, kinds, sizes, latencies
+         only — see CLAUDE.md), so these are safe to keep on disk. -->
+    <key>StandardOutPath</key>
+    <string>__LOG_DIR__/copycatd.log</string>
+    <key>StandardErrorPath</key>
+    <string>__LOG_DIR__/copycatd.log</string>
+</dict>
+</plist>

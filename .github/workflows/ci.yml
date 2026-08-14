@@ -1,0 +1,226 @@
+name: CI
+
+# Build + test the workspace on every push to main and every PR. Runnable
+# locally with `act` (see .actrc + docs/TESTING.md § "Run the automated tests").
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same ref cancels the in-flight run; a same-repo PR no
+# longer double-runs (push + pull_request) the whole matrix.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Dev headers for the native crates on a clean Ubuntu runner:
+      #  - copycatd's clipboard backend (arboard / x11 / wayland): xcb + xkbcommon
+      #  - copycat-ui's tray + egui GUI (default `gui` feature): gtk3 +
+      #    appindicator (tray-icon), GL/EGL (eframe/glow), x11/wayland (winit),
+      #    and libxdo — tray-icon -> muda -> libxdo-sys links `-lxdo`.
+      # xvfb lets the GUI-linked test binary run headlessly.
+      - name: Install Linux clipboard + GUI deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libgtk-3-dev libayatana-appindicator3-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libwayland-dev \
+            libxdo-dev \
+            xvfb xauth
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # Cache the (large, native) dependency tree so runs after the first are
+      # test-time, not cold-compile-time.
+      - uses: Swatinem/rust-cache@v2
+
+      # Fast fail-fast gates first — formatting, then lints as errors.
+      - name: Format check
+        run: cargo fmt --all --check
+
+      # The logo lives in four places (the SVG, the .ico, the macOS master and
+      # the generated CAT/ASPECT/INK consts) and all four are derived from
+      # scripts/logo/mark.py. They drifted apart once already, which is why the
+      # generator exists; without this step nothing would notice them drifting
+      # again. Compares the .ico/.png by decoded pixels rather than by bytes, so
+      # a newer librsvg or Pillow on the runner is not a failure.
+      - name: Logo assets are in sync with their master
+        run: |
+          sudo apt-get install -y --no-install-recommends librsvg2-bin
+          python3 -m pip install --quiet pillow
+          python3 scripts/logo/build.py --check
+
+      - name: Clippy (warnings are errors)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Build
+        run: cargo build --workspace --locked
+
+      # Includes the MCP smoke test (crates/copycat-mcp/tests/mcp_smoke.rs): it
+      # launches the real copycatd + copycat-mcp binaries and asserts the whole
+      # tool surface over the real socket. That is the only coverage of argument
+      # parsing, stdio JSON-RPC framing and socket-path resolution, so keep it in
+      # the blocking gate — `--workspace` is what builds both binaries for it.
+      - name: Test
+        run: xvfb-run -a cargo test --workspace --locked
+
+      # Behavioral eval self-skips (exit 0) without ANTHROPIC_API_KEY, so it can
+      # run as a non-blocking smoke check that its own launch path still works.
+      - name: Behavioral eval (skips without a key)
+        run: python3 evals/behavioral/run.py
+
+  # Windows: the only place the named-pipe IPC (server loop, SID DACL,
+  # first_pipe_instance check) actually executes — a Linux box can only
+  # type-check it. The GUI is linted here, not built: clippy catches the
+  # cfg-per-OS import slips without paying for an egui/eframe link.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build (daemon, CLI, MCP)
+        run: cargo build --locked -p copycatd -p copycat-cli -p copycat-mcp
+
+      # copycatd's server suite runs the whole client -> pipe -> dispatch round
+      # trip against a real named pipe, which is the actual verification.
+      - name: Test
+        run: cargo test --locked -p copycat-core -p copycatd -p copycat-cli -p copycat-mcp
+
+      - name: Lint the tray GUI (no link — see the note above)
+        run: cargo clippy --locked -p copycat-ui --all-targets -- -D warnings
+
+      # The installers are the only shipped code with no Rust test behind them,
+      # and they are pure Windows: nothing else in CI can execute a .vbs shim, a
+      # Startup folder or a .lnk. Runs entirely in a temp dir.
+      - name: Test the Windows installers
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File dist\windows\test-install.ps1
+
+  # macOS: the only job that compiles the macOS cfg paths (tray::init, menu-bar
+  # wiring) and exercises NSPasteboard.
+  macos:
+    runs-on: macos-latest        # Apple Silicon
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Scoped to copycat-ui; widen to --workspace only in a change that
+      # watches the result.
+      - name: Clippy — GUI crate, warnings are errors
+        run: cargo clippy -p copycat-ui --all-targets --locked -- -D warnings
+
+      # No system deps: NSPasteboard, the menu-bar tray and CoreGraphics are all
+      # part of the OS, so unlike Linux there is nothing to apt-get first.
+      - name: Build
+        run: cargo build --workspace --locked
+
+      # No xvfb equivalent on macOS, and none is needed: a runner has its own
+      # throwaway pasteboard. mcp_smoke's copycatd attaches it for real, which is
+      # the point — this is the only place the macOS clipboard path is executed.
+      - name: Test
+        run: cargo test --workspace --locked
+
+  # Enforce the declared MSRV (Cargo.toml rust-version). Build-only is the common
+  # compromise: it catches use of APIs newer than the floor without paying for a
+  # second full test run. The native build-test job above uses stable.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Must stay in step with build-test's list above, minus xvfb/xauth (this job
+      # only builds, it never runs the GUI binary). libxdo-dev in particular is
+      # required to LINK copycat-ui: tray-icon -> muda -> libxdo-sys emits `-lxdo`.
+      - name: Install Linux clipboard + GUI deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libgtk-3-dev libayatana-appindicator3-dev \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libwayland-dev \
+            libxdo-dev
+      # Must match `rust-version` in the root Cargo.toml; nothing enforces that, so
+      # bump both together. See the note there for how to re-derive the floor.
+      - uses: dtolnay/rust-toolchain@1.95
+      - uses: Swatinem/rust-cache@v2
+      - name: Build on the MSRV toolchain
+        run: cargo build --workspace --locked
+
+  # Cheap and toolchain-free, so it runs on every event. Catches the doc rules a
+  # reviewer misses: dashes, emoji, length caps, dead relative links.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sh scripts/check-docs.sh
+
+  # Isolated, reproducible build on a clean Debian image — catches dependency /
+  # environment drift the native job can't. Scoped to main + tags so it doesn't
+  # re-run the whole suite on every PR push (the native job is authoritative).
+  docker-debian:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build + test in a clean Debian container
+        run: docker build -t copycat:test .
+
+  # Scan the (large, native) dependency tree against the RustSec advisory DB so a
+  # newly-disclosed vuln in a transitive crate surfaces automatically.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Supply-chain policy beyond advisories: banned/duplicate crates and untrusted
+  # sources. License policy is intentionally left to a follow-up (the native
+  # graph is large; enable `[licenses]` in deny.toml once an allowlist is agreed).
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans sources advisories
+
+  # A clipboard daemon is exactly the codebase where a leaked token in a test
+  # fixture or a pasted log line goes unnoticed, and CLAUDE.md's hard rules say
+  # never commit keys or clipboard dumps. .gitleaks.toml has been in the repo
+  # since the start; until now nothing ran it. fetch-depth: 0 so the scan covers
+  # history, not just the tip commit.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # gitleaks-action is free for personal repos and public repos. If this
+          # ever moves under an organisation, it needs a GITLEAKS_LICENSE secret.

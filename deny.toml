@@ -1,0 +1,60 @@
+# cargo-deny policy. Advisories are denied and the CI job blocks the build.
+# Duplicate and wildcard findings only warn: the native GUI tree legitimately
+# pulls several versions of low-level crates, and cargo-deny 0.20 cannot resolve
+# our path-only `copycat-core.workspace = true` entries, which it then reports as
+# wildcards.
+#
+# POLICY, same as .cargo/audit.toml: nothing is ignored to make CI green. An
+# advisory is ignored ONLY when there is no upgrade path from this repo and the
+# reasoning is written down so the next person can re-check it. Anything
+# fixable gets fixed instead (see the quick-xml note below for what that looks
+# like).
+
+[advisories]
+version = 2
+ignore = [
+  # --- the archived gtk3-rs stack: unmaintained, no upgrade available ---------
+  #
+  # These are maintenance-status advisories, not known vulnerabilities. Every
+  # one of them says "No safe upgrade is available!"; the migration target is
+  # gtk4-rs. They reach us through exactly one path, the Linux tray:
+  #
+  #   copycat-ui (feature `gui`) -> gtk 0.18          (glib main loop in tray.rs)
+  #   copycat-ui (feature `gui`) -> tray-icon 0.24 -> libappindicator -> gtk 0.18
+  #
+  # tray-icon 0.24's only Linux backend is its default `gtk` feature, which
+  # pulls libappindicator and so gtk3. There is no ksni backend to switch to.
+  # Nothing here is linked into copycatd, copycat or copycat-mcp: build
+  # copycat-ui with --no-default-features and the whole stack disappears.
+  #
+  # RE-CHECK IF: tray-icon ships a gtk4 or ksni backend, at which point drop
+  # these eight lines and the gtk dependency in crates/copycat-ui/Cargo.toml.
+  { id = "RUSTSEC-2024-0412", reason = "gdk: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0413", reason = "atk: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0415", reason = "gtk: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0416", reason = "atk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0418", reason = "gdk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: archived gtk3-rs, no upgrade path; Linux tray only" },
+  { id = "RUSTSEC-2024-0420", reason = "gtk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
+
+  # proc-macro-error: unmaintained, and a build-time macro dependency of
+  # glib-macros and gtk3-macros. Compile-time only, never linked. Goes away with
+  # the gtk3 stack above.
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: unmaintained build-time macro dep of the archived gtk3 stack" },
+]
+
+# DELIBERATELY NOT IGNORED
+#
+# RUSTSEC-2026-0194 / RUSTSEC-2026-0195 — quick-xml DoS advisories, reached via
+#   wayland-scanner's build-time code generator. These were fixed properly:
+#   wayland-scanner 0.31.11 requires quick-xml 0.41, so `cargo update -p
+#   wayland-scanner` moved the lockfile off the vulnerable 0.39 line. If they
+#   come back, CI should fail. Leave them armed.
+
+[bans]
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,79 @@
+#!/bin/sh
+# Reject Rust files that aren't rustfmt-clean, before they get committed.
+#
+# Scope is deliberately the STAGED FILES, not the workspace. `cargo fmt --all
+# --check` would be simpler, but several long-standing files in this repo are
+# not rustfmt-clean, so a workspace-wide gate would block every commit until
+# someone does a big-bang reformat — a huge diff that buries real changes and
+# collides with anyone else working in the tree. Checking only what you are
+# actually committing keeps the gate honest: new and edited code must be clean,
+# legacy files get fixed when someone next touches them.
+#
+# Install (once per clone — hooks are not copied by `git clone`):
+#   git config --local core.hooksPath .githooks
+# Bypass for one commit:
+#   git commit --no-verify
+set -eu
+
+# Secrets first: a bad format is an annoyance, a committed credential is an
+# incident, and once it reaches history removing it means a rewrite. Scans the
+# STAGED changes only, using the repo's .gitleaks.toml. CI re-runs it over full
+# history, so skipping here when gitleaks is absent loses nothing permanent.
+if command -v gitleaks >/dev/null 2>&1; then
+	if ! gitleaks git --staged --no-banner --redact -c .gitleaks.toml >/dev/null 2>&1; then
+		echo "pre-commit: gitleaks found a secret in the staged changes." >&2
+		echo "" >&2
+		echo "  look:   gitleaks git --staged --redact -c .gitleaks.toml -v" >&2
+		echo "  bypass: git commit --no-verify   (only if it is a false positive," >&2
+		echo "          and add a rule to .gitleaks.toml so it stays quiet)" >&2
+		exit 1
+	fi
+else
+	echo "pre-commit: gitleaks not on PATH — skipping the secret scan." >&2
+	echo "            install it from https://github.com/gitleaks/gitleaks/releases" >&2
+fi
+
+# Added/Copied/Modified only — a file being deleted has nothing to format.
+files=$(git diff --cached --name-only --diff-filter=ACM -- '*.rs')
+if [ -z "$files" ]; then
+	exit 0
+fi
+
+if ! command -v rustfmt >/dev/null 2>&1; then
+	echo "pre-commit: rustfmt not on PATH — skipping the format check." >&2
+	echo "            install it with: rustup component add rustfmt" >&2
+	exit 0
+fi
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+bad=''
+# -r: don't mangle backslashes. IFS='': keep leading/trailing spaces in paths.
+while IFS= read -r f; do
+	[ -n "$f" ] || continue
+	# Check the STAGED bytes, not the working tree. After a partial `git add -p`
+	# the two differ, and it is the staged version that becomes the commit.
+	staged="$tmp/$(printf '%s' "$f" | tr '/' '_')"
+	git show ":$f" >"$staged" 2>/dev/null || continue
+	# skip_children: without it rustfmt follows `mod` declarations and reports
+	# sibling files this commit never touched.
+	if ! rustfmt --edition 2021 --check --config skip_children=true "$staged" >/dev/null 2>&1; then
+		bad="$bad $f"
+	fi
+done <<EOF
+$files
+EOF
+
+if [ -z "$bad" ]; then
+	exit 0
+fi
+
+echo "pre-commit: not rustfmt-clean:" >&2
+for f in $bad; do
+	echo "  $f" >&2
+done
+echo "" >&2
+echo "  fix:    rustfmt --edition 2021$bad && git add$bad" >&2
+echo "  bypass: git commit --no-verify" >&2
+exit 1

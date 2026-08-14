@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>enter-text (seed 0)</title>
+<style>
+ body{font-family:system-ui,sans-serif;margin:2rem;max-width:640px}
+ h1{font-size:1.1rem} .panel{border:1px solid #ccc;border-radius:8px;padding:1rem;margin:1rem 0}
+ .row{display:flex;gap:.75rem;align-items:center;margin:.35rem 0}
+ .lbl{width:6rem;color:#555;font-size:.85rem}
+ .src{font-family:monospace;background:#f4f4f4;padding:.15rem .4rem;border-radius:4px}
+ input{flex:1;padding:.3rem .4rem;font-family:monospace}
+ button{padding:.4rem .9rem;margin-top:.5rem}
+ #status{margin-top:.6rem;font-family:monospace}
+</style></head>
+<body>
+<h1>Task: enter-text — move source values into the form and submit</h1>
+<div class="panel"><strong>Source</strong><div class="row"><span class="lbl">value</span><span class="src" id="src-value">order-985440-torvalds</span></div></div>
+<div class="panel"><strong>Target form</strong><div class="row"><label class="lbl" for="tgt-value">value</label><input type="text" id="tgt-value" autocomplete="off"></div>
+  <button id="submit" type="button">Submit</button>
+  <div id="status">unsubmitted</div>
+</div>
+<script>
+ window.__TASK = {"name": "enter-text", "shape": "form", "fields": [{"key": "value", "value": "order-985440-torvalds", "source_sel": "#src-value", "target_sel": "#tgt-value", "secret": false}], "targets": [{"key": "value", "sel": "#tgt-value"}], "submit_sel": "#submit", "secret": false, "check": "exact", "expected": {"value": "order-985440-torvalds"}};
+ window.__SUBMITTED = null;
+ window.__DONE = false;
+ document.getElementById('submit').addEventListener('click', function() {
+   var out = {};
+   window.__TASK.fields.forEach(function(f) {
+     out[f.key] = document.getElementById('tgt-' + f.key).value;
+   });
+   window.__SUBMITTED = out;
+   window.__DONE = true;
+   document.getElementById('status').textContent = 'submitted';
+ });
+</script>
+</body></html>

@@ -1,0 +1,5 @@
+# Local CI via act:  act -j build-test   (act -l lists jobs; details in docs/TESTING.md)
+# The image pin is load-bearing — act's default images ship no sudo/apt, which
+# the deps-install step needs. --reuse keeps containers warm between runs.
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+--reuse

@@ -1,0 +1,4 @@
+__pycache__/
+# Tier 2 vendors the real MiniWoB++ task pages (see tier2_miniwob.py). ~130 HTML
+# files + assets, fetched with `git clone`, never edited — don't commit them.
+vendor/
