@@ -304,7 +304,11 @@ mod tests {
         let px = rasterize(size, INK);
         assert_eq!(px.len(), (size * size * 4) as usize);
         // Every pixel carries the requested colour; only alpha varies.
-        assert!(px.chunks_exact(4).all(|p| [p[0], p[1], p[2]] == INK));
+        assert!(px
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| [p[0], p[1], p[2]] == INK));
     }
 
     #[test]
@@ -314,7 +318,7 @@ mod tests {
         // that failed to generate; the upper bound catches the opposite
         // regression, a `Prim` that fills its interior.
         let px = rasterize(32, [255, 255, 255]);
-        let opaque = px.chunks_exact(4).filter(|p| p[3] > 128).count();
+        let opaque = px.as_chunks::<4>().0.iter().filter(|p| p[3] > 128).count();
         assert!(
             (40..300).contains(&opaque),
             "expected an outline's worth of ink, got {opaque} px of 1024"
@@ -326,7 +330,7 @@ mod tests {
         // Supersampling must produce partial coverage at the edges, otherwise
         // the mark looks jagged in the tray.
         let px = rasterize(32, [255, 255, 255]);
-        assert!(px.chunks_exact(4).any(|p| p[3] > 0 && p[3] < 255));
+        assert!(px.as_chunks::<4>().0.iter().any(|p| p[3] > 0 && p[3] < 255));
     }
 
     /// Endpoints of the outline segments, in order. The mark's skeleton.
