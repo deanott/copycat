@@ -31,7 +31,7 @@ eframe = { version = "0.36", default-features = false, features = [
     "persistence",   # eframe::Storage: window geometry + egui memory (the
                      # detail-panel split) survive a restart
 ], optional = true }
-tray-icon = { version = "0.24", optional = true }
+tray-icon = { version = "0.25", optional = true }
 
 # tray.rs pumps a glib main loop for the StatusNotifier tray. Pin the gtk major
 # tray-icon links, so the build holds one gtk.
