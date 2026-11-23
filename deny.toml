@@ -13,30 +13,6 @@
 [advisories]
 version = 2
 ignore = [
-  # --- the archived gtk3-rs stack: unmaintained, no upgrade available ---------
-  #
-  # These are maintenance-status advisories, not known vulnerabilities. Every
-  # one of them says "No safe upgrade is available!"; the migration target is
-  # gtk4-rs. They reach us through exactly one path, the Linux tray:
-  #
-  #   copycat-ui (feature `gui`) -> gtk 0.18          (glib main loop in tray.rs)
-  #   copycat-ui (feature `gui`) -> tray-icon 0.24 -> libappindicator -> gtk 0.18
-  #
-  # tray-icon 0.24's only Linux backend is its default `gtk` feature, which
-  # pulls libappindicator and so gtk3. There is no ksni backend to switch to.
-  # Nothing here is linked into copycatd, copycat or copycat-mcp: build
-  # copycat-ui with --no-default-features and the whole stack disappears.
-  #
-  # RE-CHECK IF: tray-icon ships a gtk4 or ksni backend, at which point drop
-  # these eight lines and the gtk dependency in crates/copycat-ui/Cargo.toml.
-  { id = "RUSTSEC-2024-0412", reason = "gdk: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0413", reason = "atk: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0415", reason = "gtk: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0416", reason = "atk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0418", reason = "gdk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0419", reason = "gtk3-macros: archived gtk3-rs, no upgrade path; Linux tray only" },
-  { id = "RUSTSEC-2024-0420", reason = "gtk-sys: archived gtk3-rs, no upgrade path; Linux tray only" },
-
   # proc-macro-error: unmaintained, and a build-time macro dependency of
   # glib-macros and gtk3-macros. Compile-time only, never linked. Goes away with
   # the gtk3 stack above.
